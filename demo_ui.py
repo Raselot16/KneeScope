@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from classification_ui import render_batch
-from dashboard_core import FEATURES, RED_FLAGS, assess, care_direction
+from dashboard_core import FEATURES, KOA_LABEL_LIMIT, KOA_OUTCOME, RED_FLAGS, assess, care_direction
 
 
 def load_example():
@@ -64,10 +64,10 @@ def render_single(context, chart):
         a, b = st.columns(2)
         a.metric('Nhãn dự đoán', label)
         b.metric('Điểm lớp 1', f'{score:.3f}')
-        st.write(f"Nhãn {label} tương ứng với **{'diagnosed' if label == 1 else 'at risk'}** theo MatchThem.")
+        st.write(KOA_OUTCOME)
         if summary.get('score_reference'):
             show_score(summary['score_reference'], score, chart)
-        st.caption('Kết quả trên bộ dữ liệu thực hành. Điểm lớp 1 chưa được hiệu chỉnh thành xác suất lâm sàng.')
+        st.caption(f'{KOA_LABEL_LIMIT} Điểm lớp 1 chưa được kiểm định để diễn giải thành nguy cơ cá nhân.')
         with st.expander('Xem đầu vào đã gửi'):
             st.json(result['inputs'])
         st.download_button('Tải kết quả JSON', json.dumps(result, ensure_ascii=False, indent=2),
@@ -100,7 +100,7 @@ def show_score(reference, score, chart):
 
 
 def render_symptoms():
-    st.caption('Hướng dẫn tham khảo dựa trên thông tin bạn tự khai.')
+    st.caption('Hướng dẫn tham khảo dựa trên triệu chứng bạn tự khai và tài liệu NHS. Phần này độc lập với nhãn và điểm KOA.')
     with st.form('symptom_info'):
         flags = st.multiselect('Dấu hiệu hiện có', RED_FLAGS)
         checked = st.checkbox('Tôi đã kiểm tra danh sách dấu hiệu.')

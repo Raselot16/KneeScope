@@ -227,7 +227,7 @@
       ],
       "training_eligible": true,
       "quality_notes": [
-        "Dữ liệu dẫn xuất OAI có chỉnh sửa; nhãn 0 = at risk, nhãn 1 = diagnosed.",
+        "Dữ liệu dẫn xuất OAI có chỉnh sửa. Nhãn 0 và 1 biểu thị KOA tại lần theo dõi theo định nghĩa của bộ dữ liệu. Cách xác định nhãn và mốc theo dõi cụ thể của MatchThem chưa được xác minh.",
         "SEX chưa xác minh cách mã hóa; không dùng trong mô hình.",
         "Không gộp với OAI hoặc các bản OAI khác khi chưa kiểm tra trùng người.",
         "Mô hình hiện chỉ học từ 2.392 hồ sơ có nhãn trong nguồn này."

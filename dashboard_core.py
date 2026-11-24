@@ -9,7 +9,9 @@ import pandas as pd
 FEATURES = ['age', 'bmi', 'smoking', 'osteoporosis_baseline']
 TARGET = 'koa_followup'
 MODEL_NAMES = {'LogisticRegression': 'Logistic Regression', 'RandomForest': 'Random Forest'}
-LABEL_NAMES = ['Nhãn 0 · at risk', 'Nhãn 1 · diagnosed', 'Chưa có nhãn']
+LABEL_NAMES = ['Nhãn 0', 'Nhãn 1', 'Chưa có nhãn']
+KOA_OUTCOME = 'KOA tại lần theo dõi theo định nghĩa của bộ dữ liệu'
+KOA_LABEL_LIMIT = 'Cách xác định nhãn và mốc theo dõi cụ thể của MatchThem chưa được xác minh.'
 RED_FLAGS = [
     'Đau gối rất nhiều',
     'Không cử động được gối hoặc không chịu được lực lên chân',
@@ -193,7 +195,7 @@ def care_direction(flags, checked, persistent):
         return {'level': 'appointment', 'title': 'Nên đặt lịch khám',
                 'message': 'Đau gối không cải thiện sau vài tuần cần được nhân viên y tế đánh giá.',
                 'basis': ['Bạn khai đau gối không cải thiện sau vài tuần.'], 'source': SOURCES['Đau gối và dấu hiệu cần khám sớm · NHS']}
-    return {'level': 'selfcare', 'title': 'Theo dõi và chăm sóc thường ngày',
+    return {'level': 'selfcare', 'title': 'Chưa ghi nhận dấu hiệu cần khám khẩn',
             'message': 'Câu trả lời hiện chưa ghi nhận dấu hiệu cần khám khẩn. Điều này không xác nhận bạn khỏe mạnh hoặc loại trừ bệnh.',
             'basis': ['Bạn xác nhận đã kiểm tra dấu hiệu và không khai đau kéo dài.'], 'source': SOURCES['Đau gối và dấu hiệu cần khám sớm · NHS']}
 
@@ -228,4 +230,4 @@ def assess(context, inputs, flags=(), checked=False, persistent=None):
     return {'inputs': inputs, 'prediction': prediction, 'issues': issues, 'care': care,
             'symptoms': {'flags': list(flags), 'checked': bool(checked), 'persistent': persistent},
             'model_name': context['model_name'], 'model_sha256': context['summary']['model_sha256'],
-            'scope': 'Experimental KOA label; relative score groups are not validated clinical risk categories.'}
+            'scope': f'{KOA_OUTCOME}. {KOA_LABEL_LIMIT} Điểm lớp 1 chưa được kiểm định để diễn giải thành nguy cơ cá nhân.'}

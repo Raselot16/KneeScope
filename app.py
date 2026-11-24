@@ -9,7 +9,7 @@ from data_library import load_library, render_data_library
 from care_clinical import render_care_clinical
 from early_warning_ui import render_early_warning
 from classification_ui import render_evaluation
-from dashboard_core import MODEL_NAMES, LABEL_NAMES, SOURCES, load_context
+from dashboard_core import KOA_LABEL_LIMIT, KOA_OUTCOME, LABEL_NAMES, MODEL_NAMES, SOURCES, load_context
 from demo_ui import render_demo
 
 BASE=Path(__file__).resolve().parent
@@ -135,8 +135,13 @@ if page=='Tổng quan':
             panel_heading('Độ đầy đủ của nhãn','Tỷ lệ hồ sơ có nhãn kết cục trong bảng đang chọn','data')
             ring=f'<div class="ring" style="--coverage:{coverage:.3f}%"><div><strong>{coverage:.1f}%</strong><small>Có nhãn</small></div></div>'
             st.markdown(f'<div class="coverage-row">{ring}<div><h3>{labeled:,} / {d["n"]:,} hồ sơ</h3><p>Đã có nhãn kết cục</p><span class="subtle-pill">{d["label_counts"][2]:,} hồ sơ chưa có nhãn</span></div></div>',unsafe_allow_html=True)
-            st.markdown(f'<div class="data-tiles"><div><span class="tile-dot blue"></span><small>Nhãn 0 · at risk</small><strong>{d["label_counts"][0]:,}</strong></div><div><span class="tile-dot navy"></span><small>Nhãn 1 · diagnosed</small><strong>{d["label_counts"][1]:,}</strong></div><div><span class="tile-dot gray"></span><small>Chưa có nhãn</small><strong>{d["label_counts"][2]:,}</strong></div></div>',unsafe_allow_html=True)
-            st.caption('Mức đầy đủ của dữ liệu, không phải chỉ số sức khỏe. Nhãn 0 không đồng nghĩa hoàn toàn khỏe mạnh.')
+            tiles = ''.join(
+                f'<div><span class="tile-dot {color}"></span>'
+                f'<small>{name}</small><strong>{count:,}</strong></div>'
+                for name, count, color in zip(LABEL_NAMES, d['label_counts'], ('blue', 'navy', 'gray'))
+            )
+            st.markdown(f'<div class="data-tiles">{tiles}</div>', unsafe_allow_html=True)
+            st.caption(f'{KOA_OUTCOME}. {KOA_LABEL_LIMIT}')
     with right:
         with st.container(border=True,key='model_snapshot'):
             panel_heading('Hồ sơ hiệu năng mô hình','So sánh trên cùng cách chia train / test','chart')
@@ -218,11 +223,11 @@ if page=='Phương pháp & nguồn':
     st.markdown('<div class="section-kicker">MINH BẠCH NGHIÊN CỨU</div><h2>Phương pháp & nguồn</h2>',unsafe_allow_html=True)
     st.dataframe(pd.DataFrame([
         ['Biểu đồ dữ liệu','Thống kê từ CSV','Không phải tỷ lệ mắc bệnh của dân số'],
-        ['Điểm lớp 1','Điểm đầu ra Logistic Regression','Chưa hiệu chỉnh thành xác suất lâm sàng'],
+        ['Điểm lớp 1','Điểm đầu ra Logistic Regression','Chưa được kiểm định để diễn giải thành nguy cơ cá nhân'],
         ['Hướng dẫn đi khám','Triệu chứng tự khai và tài liệu NHS','Độc lập với mô hình ML; không thay thế khám'],
     ],columns=['Thành phần','Căn cứ','Giới hạn']),hide_index=True,width='stretch')
-    st.markdown('''
-**Bài toán:** phân loại nhị phân `koa_followup` từ tuổi, BMI, hút thuốc và loãng xương ban đầu. Nhãn nguồn 0 = “at risk”, 1 = “diagnosed” tại lần theo dõi; chưa xác minh thời hạn kết cục.
+    st.markdown(f'''
+Mô hình phân loại nhị phân `koa_followup` từ tuổi, BMI, hút thuốc và loãng xương ban đầu. Hai nhãn 0 và 1 biểu thị {KOA_OUTCOME}. {KOA_LABEL_LIMIT}
 
 **Loãng xương và thoái hóa khớp gối là hai tình trạng khác nhau.** Loãng xương hiện là đầu vào đã biết. Muốn dự đoán loãng xương cần dữ liệu, nhãn và đánh giá riêng; đánh giá y tế có thể bao gồm đo mật độ xương DXA.
 

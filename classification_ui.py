@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from batch_inference import EXAMPLE_CSV, score_batch
-from dashboard_core import MODEL_NAMES
+from dashboard_core import KOA_LABEL_LIMIT, KOA_OUTCOME, LABEL_NAMES, MODEL_NAMES
 
 MEASURES = {
     'accuracy': 'Accuracy', 'precision_class_1': 'Precision lớp 1',
@@ -75,7 +75,7 @@ def class_scores(matrix):
     recall = np.divide(correct, actual, out=zero.copy(), where=actual != 0)
     f1 = np.divide(2 * correct, actual + predicted, out=zero.copy(), where=actual + predicted != 0)
     return pd.DataFrame({
-        'Lớp': ['0 · at risk', '1 · diagnosed'], 'Số hồ sơ thực tế': actual,
+        'Lớp': LABEL_NAMES[:2], 'Số hồ sơ thực tế': actual,
         'Precision': precision, 'Recall': recall, 'F1': f1,
     })
 
@@ -94,7 +94,7 @@ def result_table(report, per_class):
 
 def render_confusion(matrices, chart):
     st.markdown('### Ma trận nhầm lẫn')
-    st.caption('Hàng là nhãn thực tế, cột là nhãn dự đoán. Hai ô trên đường chéo là các dự đoán đúng.')
+    st.caption('Hàng là nhãn ghi trong bộ dữ liệu, cột là nhãn mô hình dự đoán. Hai ô trên đường chéo là các dự đoán khớp nhãn.')
     normalized = st.toggle('Hiện tỷ lệ theo từng lớp thực tế', key='evaluation_normalized',
                            help='Mỗi hàng tính theo tổng số hồ sơ của lớp thực tế tương ứng.')
     limit = 100 if normalized else max(int(matrix.max()) for matrix in matrices.values()) or 1
@@ -107,7 +107,7 @@ def render_confusion(matrices, chart):
             st.markdown(f'#### {MODEL_NAMES[name]}')
             fig = go.Figure(go.Heatmap(
                 z=rates if normalized else matrix,
-                x=['Dự đoán 0', 'Dự đoán 1'], y=['Thực tế 0', 'Thực tế 1'],
+                x=['Dự đoán 0', 'Dự đoán 1'], y=['Nhãn nguồn 0', 'Nhãn nguồn 1'],
                 text=labels, texttemplate='%{customdata[0]}<br><b>%{text}</b>',
                 textfont={'size': 15, 'color': '#162f43'},
                 customdata=[[[label, int(count), float(rate)]
@@ -155,6 +155,7 @@ def render_evaluation(base, context, chart):
         return
     diagnostics = read_diagnostics(base, context['summary'])
     st.caption(f"{report['train_rows']:,} hồ sơ train · {report['test_rows']:,} hồ sơ test · Ngưỡng báo cáo {report['decision_threshold']:g}.")
+    st.caption(f'{KOA_OUTCOME}. {KOA_LABEL_LIMIT}')
     results, curves, experiment = st.tabs(['So sánh trên test', 'ROC & Precision–Recall', 'Tối ưu trên train'])
     with results:
         matrices = {name: np.asarray(values['confusion_matrix']) for name, values in report['test'].items()}
