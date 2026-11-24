@@ -1234,5 +1234,265 @@
         ]
       }
     }
+  },
+  "duplicate_sensitivity": {
+    "model": "LogisticRegression",
+    "matching_fields": [
+      "age",
+      "sex",
+      "bmi",
+      "rac",
+      "smk",
+      "osp",
+      "koa"
+    ],
+    "train_rows": 1913,
+    "train_rows_in_repeated_groups": 82,
+    "train_excess_rows": 41,
+    "test_rows": 479,
+    "test_rows_matching_train": 23,
+    "test_rows_retained": 456,
+    "bootstrap_resamples": 5000,
+    "bootstrap_seed": 42,
+    "auc": {
+      "full": {
+        "value": 0.640263249651325,
+        "ci95": [
+          0.5890204410739192,
+          0.6881278329846583
+        ]
+      },
+      "filtered": {
+        "value": 0.6416905526806841,
+        "ci95": [
+          0.5894927187734451,
+          0.691372660292788
+        ]
+      },
+      "delta": {
+        "value": 0.0014273030293591171,
+        "ci95": [
+          -0.008976558798518091,
+          0.013034887620902068
+        ]
+      }
+    }
+  },
+  "extended_validation": {
+    "cv": {
+      "rows": [
+        {
+          "name": "LR C=0,1",
+          "mean": 0.6444201976142832,
+          "fold_sd": 0.02729873400176082,
+          "one_se_eligible": true
+        },
+        {
+          "name": "LR C=1 (đang triển khai)",
+          "mean": 0.6441682656725419,
+          "fold_sd": 0.027119584680915472,
+          "one_se_eligible": true
+        },
+        {
+          "name": "LR C=10",
+          "mean": 0.6441239903420045,
+          "fold_sd": 0.027097835980950103,
+          "one_se_eligible": true
+        },
+        {
+          "name": "LR spline tuổi/BMI",
+          "mean": 0.6423831140982064,
+          "fold_sd": 0.026899104114209788,
+          "one_se_eligible": true
+        },
+        {
+          "name": "Histogram Gradient Boosting",
+          "mean": 0.6178345634257102,
+          "fold_sd": 0.025627842953560298,
+          "one_se_eligible": false
+        }
+      ],
+      "best": "LR C=0,1",
+      "naive_se_best": 0.0038606239860905704,
+      "threshold": 0.6405595736281926,
+      "one_se": "LR C=0,1",
+      "folds": 5,
+      "repeats": 10,
+      "one_se_with_feature_selection": "Tuổi + BMI",
+      "threshold_with_feature_selection": 0.6407387670376014,
+      "seed": 42,
+      "lr_boosting_diff": 0.026333702246831653,
+      "lr_boosting_corrected_se": 0.009576987120524537,
+      "ablation": [
+        {
+          "name": "Tuổi",
+          "mean": 0.517026026104913,
+          "fold_sd": 0.025460210713035558
+        },
+        {
+          "name": "Tuổi + BMI",
+          "mean": 0.6448505900331679,
+          "fold_sd": 0.029074979232039264
+        },
+        {
+          "name": "Tuổi + BMI + hút thuốc",
+          "mean": 0.6446738085121936,
+          "fold_sd": 0.027771397976051545
+        },
+        {
+          "name": "Tuổi + BMI + loãng xương",
+          "mean": 0.6441304520389609,
+          "fold_sd": 0.028445092753169508
+        },
+        {
+          "name": "Đủ bốn biến",
+          "mean": 0.6441682656725419,
+          "fold_sd": 0.027119584680915472
+        }
+      ]
+    },
+    "exclusion": [
+      {
+        "has_label": false,
+        "n": 193,
+        "age": {
+          "n": 193,
+          "mean": 68.44559585492227,
+          "sd": 5.815603453066248,
+          "median": 68.0
+        },
+        "bmi": {
+          "n": 193,
+          "mean": 28.84041450777202,
+          "sd": 4.856152008255964,
+          "median": 28.4
+        }
+      },
+      {
+        "has_label": true,
+        "n": 2392,
+        "age": {
+          "n": 2392,
+          "mean": 68.40091973244147,
+          "sd": 5.386388578858238,
+          "median": 68.0
+        },
+        "bmi": {
+          "n": 2391,
+          "mean": 28.345629443747384,
+          "sd": 4.553506710093323,
+          "median": 28.1
+        }
+      }
+    ],
+    "paired_test_auc": {
+      "lr": {
+        "value": 0.640263249651325,
+        "ci95": [
+          0.5904983873779638,
+          0.6882962866108786
+        ]
+      },
+      "boosting": {
+        "value": 0.6144089958158996,
+        "ci95": [
+          0.5633479341004184,
+          0.6637994682705718
+        ]
+      },
+      "lr_minus_boosting": {
+        "value": 0.02585425383542539,
+        "ci95": [
+          0.00033930439330541207,
+          0.05099176255230119
+        ]
+      }
+    },
+    "bootstrap_resamples": 5000,
+    "bootstrap_seed": 42,
+    "thresholds": [
+      {
+        "threshold": 0.3,
+        "sensitivity": 0.9665271966527197,
+        "specificity": 0.11666666666666667,
+        "false_positives": 212,
+        "false_negatives": 8
+      },
+      {
+        "threshold": 0.4,
+        "sensitivity": 0.8117154811715481,
+        "specificity": 0.37083333333333335,
+        "false_positives": 151,
+        "false_negatives": 45
+      },
+      {
+        "threshold": 0.5,
+        "sensitivity": 0.5481171548117155,
+        "specificity": 0.6916666666666667,
+        "false_positives": 74,
+        "false_negatives": 108
+      },
+      {
+        "threshold": 0.6,
+        "sensitivity": 0.3054393305439331,
+        "specificity": 0.8416666666666667,
+        "false_positives": 38,
+        "false_negatives": 166
+      },
+      {
+        "threshold": 0.7,
+        "sensitivity": 0.12552301255230125,
+        "specificity": 0.9583333333333334,
+        "false_positives": 10,
+        "false_negatives": 209
+      }
+    ],
+    "calibration": {
+      "bins": [
+        {
+          "n": 60,
+          "mean_score": 0.2837504353278281,
+          "fraction_one": 0.35
+        },
+        {
+          "n": 60,
+          "mean_score": 0.3628775109386926,
+          "fraction_one": 0.3
+        },
+        {
+          "n": 60,
+          "mean_score": 0.4131467083507335,
+          "fraction_one": 0.45
+        },
+        {
+          "n": 61,
+          "mean_score": 0.4574088467866312,
+          "fraction_one": 0.45901639344262296
+        },
+        {
+          "n": 58,
+          "mean_score": 0.5003754244995531,
+          "fraction_one": 0.5862068965517241
+        },
+        {
+          "n": 60,
+          "mean_score": 0.5579496201181341,
+          "fraction_one": 0.5833333333333334
+        },
+        {
+          "n": 60,
+          "mean_score": 0.6254923939217384,
+          "fraction_one": 0.6
+        },
+        {
+          "n": 60,
+          "mean_score": 0.7337161334588237,
+          "fraction_one": 0.6666666666666666
+        }
+      ],
+      "brier": 0.23528982374479002,
+      "baseline_brier": 0.24999952265731948,
+      "test_fraction_one": 0.4989561586638831
+    }
   }
 }

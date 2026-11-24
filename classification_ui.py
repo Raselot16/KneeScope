@@ -147,6 +147,136 @@ def render_curves(diagnostics, report, chart):
     st.caption(f"Precision–Recall dùng tỷ lệ nhãn 1 của tập kiểm tra làm mốc ({positive}/{report['test_rows']}).")
 
 
+def render_duplicate_sensitivity(audit):
+    st.markdown(f"### {MODEL_NAMES[audit['model']]} trước và sau khi loại dòng test trùng train")
+    st.caption('Dùng cùng mô hình đã huấn luyện. Chỉ thay đổi các dòng được tính điểm trong tập test.')
+    rows = []
+    for key, title, count in (
+        ('full', 'Trước khi loại', audit['test_rows']),
+        ('filtered', 'Sau khi loại', audit['test_rows_retained']),
+        ('delta', 'Chênh lệch (sau trừ trước)', '—'),
+    ):
+        result = audit['auc'][key]
+        low, high = result['ci95']
+        rows.append({
+            'Tập đánh giá': title,
+            'Số dòng': str(count),
+            'ROC-AUC / chênh lệch': f"{result['value']:.4f}",
+            'Khoảng tin cậy 95%': f'[{low:.4f}, {high:.4f}]',
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+
+    st.markdown('### Tỷ lệ trùng theo giá trị')
+    rows = []
+    for title, count, total in (
+        ('Train có ít nhất một dòng khác giống hệt trong train',
+         audit['train_rows_in_repeated_groups'], audit['train_rows']),
+        ('Test có ít nhất một dòng giống hệt trong train',
+         audit['test_rows_matching_train'], audit['test_rows']),
+        ('Train chỉ đếm phần lặp dư sau khi giữ một dòng mỗi nhóm',
+         audit['train_excess_rows'], audit['train_rows']),
+    ):
+        rows.append({'Cách đếm': title, 'Số dòng / tổng số': f'{count}/{total}', 'Tỷ lệ': f'{count / total:.2%}'})
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+    st.caption('So khớp 7 trường gốc, gồm cả nhãn KOA. Bản MatchThem thiếu mã người tham gia OAI nên chưa xác minh được trùng người.')
+    with st.expander('Cách tính khoảng tin cậy'):
+        st.write(
+            f"Bootstrap ghép cặp {audit['bootstrap_resamples']} lượt, seed {audit['bootstrap_seed']}. "
+            'Mỗi lượt lấy mẫu có hoàn lại theo nhãn KOA và trạng thái trùng train. '
+            'Hai AUC dùng chung các dòng lấy mẫu thuộc phần giữ lại. '
+            'Khoảng tin cậy dùng phân vị 2,5% và 97,5% trên các lượt bootstrap.'
+        )
+        st.caption('Khoảng tin cậy phản ánh biến thiên khi lấy mẫu theo dòng test với mô hình cố định. '
+                   'Kết quả chưa kiểm chứng trên một tập độc lập.')
+
+
+def render_repeated_study(cv):
+    st.markdown('### Kiểm định chéo lặp lại trên tập train')
+    st.caption(f"{cv['folds']} fold phân tầng × {cv['repeats']} lần lặp. Tất cả cấu hình dùng chung cách chia.")
+    table = pd.DataFrame([
+        {'Cấu hình': row['name'], 'ROC-AUC trung bình': row['mean'], 'SD giữa các fold': row['fold_sd'],
+         'Trong vùng một SE': 'Có' if row['one_se_eligible'] else '—'}
+        for row in cv['rows']
+    ])
+    st.dataframe(table.round(4), hide_index=True, width='stretch')
+    st.write(f"**Trong nhóm dùng đủ bốn biến, one-SE chọn {cv['one_se']}.** Cấu hình có trung bình cao nhất là {cv['best']}. "
+             f"Ngưỡng chọn {cv['threshold']:.4f} = AUC cao nhất trừ SE quy ước {cv['naive_se_best']:.4f}.")
+    st.caption('One-SE ưu tiên hồi quy tuyến tính trên log-odds và mức regularization mạnh hơn trong nhóm logistic tuyến tính, '
+               'rồi đến spline và boosting. SE quy ước dùng SD/√50 để làm quy tắc chọn; các fold dùng lại dữ liệu, '
+               'nên giá trị này có thể đánh giá thấp độ bất định. SD giữa fold mô tả độ phân tán.')
+    st.caption(f"Hiệu AUC trung bình theo cặp trên CV (LR đang triển khai trừ boosting) "
+               f"{cv['lr_boosting_diff']:+.4f}, SE hiệu chỉnh Nadeau–Bengio xấp xỉ {cv['lr_boosting_corrected_se']:.4f}.")
+
+    st.markdown('### Đóng góp của các biến đầu vào')
+    age_bmi = cv['ablation'][1]['mean']
+    ablation = pd.DataFrame([
+        {'Biến đầu vào': row['name'], 'ROC-AUC trung bình': row['mean'],
+         'SD giữa các fold': row['fold_sd'], 'Δ AUC so với tuổi + BMI': row['mean'] - age_bmi}
+        for row in cv['ablation']
+    ])
+    st.dataframe(ablation.round(4), hide_index=True, width='stretch')
+    st.caption('Huấn luyện lại Logistic Regression với C=1 trên cùng các fold cho từng tập biến. Kết quả mô tả đóng góp dự đoán.')
+    st.write(f"**Khi cho phép giảm số biến, one-SE chọn {cv['one_se_with_feature_selection']}.** "
+             f"Ngưỡng chọn là {cv['threshold_with_feature_selection']:.4f} và ưu tiên dùng ít biến hơn.")
+    st.caption('Đây là kết quả lựa chọn trên train. Web dùng Logistic Regression C=1 với bốn biến.')
+
+
+def render_validation(validation, chart):
+    st.markdown('### So sánh AUC theo cặp trên cùng tập test')
+    paired = validation['paired_test_auc']
+    table = pd.DataFrame([
+        {'So sánh': name, 'ROC-AUC / chênh lệch': f"{paired[key]['value']:.4f}",
+         'Khoảng tin cậy 95%': f"[{paired[key]['ci95'][0]:.4f}, {paired[key]['ci95'][1]:.4f}]"}
+        for key, name in (('lr', 'Logistic Regression đang dùng'),
+                          ('boosting', 'Histogram Gradient Boosting'),
+                          ('lr_minus_boosting', 'Logistic Regression trừ boosting'))
+    ])
+    st.dataframe(table, hide_index=True, width='stretch')
+    st.caption(f"Bootstrap ghép cặp {validation['bootstrap_resamples']:,} lượt, phân tầng theo nhãn nguồn. "
+               'Mỗi lượt dùng cùng các dòng test cho hai mô hình đã huấn luyện trên train. '
+               'Khoảng tin cậy theo phân vị và phụ thuộc vào tập test nội bộ.')
+
+    st.markdown('### Độ nhạy và độ đặc hiệu theo ngưỡng')
+    thresholds = pd.DataFrame([
+        {'Ngưỡng': row['threshold'], 'Sensitivity lớp 1': f"{row['sensitivity']:.1%}",
+         'Specificity lớp 0': f"{row['specificity']:.1%}",
+         'Bỏ sót lớp 1 (FN)': row['false_negatives'], 'Báo nhầm lớp 1 (FP)': row['false_positives']}
+        for row in validation['thresholds']
+    ])
+    st.dataframe(thresholds, hide_index=True, width='stretch')
+    st.caption('Các ngưỡng dùng để mô tả đánh đổi trên test của Logistic Regression.')
+
+    st.markdown('### Đường hiệu chỉnh xác suất của Logistic Regression')
+    cal = validation['calibration']
+    bins = cal['bins']
+    fig = go.Figure()
+    fig.add_scatter(x=[0, 1], y=[0, 1], mode='lines', name='Hiệu chỉnh lý tưởng',
+                    line={'dash': 'dot', 'color': '#8b9daa'})
+    fig.add_scatter(x=[row['mean_score'] for row in bins], y=[row['fraction_one'] for row in bins],
+                    customdata=[row['n'] for row in bins], mode='lines+markers', name='Logistic Regression',
+                    line={'color': '#0868b5'},
+                    hovertemplate='Điểm trung bình %{x:.3f}<br>Tỷ lệ nhãn 1 %{y:.3f}<br>Số dòng %{customdata}<extra></extra>')
+    fig.update_layout(xaxis_title='Điểm lớp 1 trung bình', yaxis_title='Tỷ lệ nhãn 1 quan sát',
+                      xaxis_range=[0, 1], yaxis_range=[0, 1])
+    chart(fig, 'evaluation_calibration', 350)
+    st.caption(f"Brier score {cal['brier']:.4f}; mốc luôn dự đoán theo tỷ lệ nhãn 1 của train "
+               f"{cal['baseline_brier']:.4f}. Tỷ lệ nhãn 1 của test là {cal['test_fraction_one']:.1%}. "
+               f"Đồ thị chia {len(bins)} nhóm theo phân vị điểm. Điểm đầu ra chưa được kiểm chứng để diễn giải "
+               'thành nguy cơ cá nhân hoặc ngoại suy theo tỷ lệ mắc bệnh ngoài cộng đồng.')
+
+    st.markdown('### Các dòng thiếu nhãn KOA')
+    excluded = pd.DataFrame([
+        {'Nhóm': 'Có nhãn' if row['has_label'] else 'Thiếu nhãn', 'Số dòng': row['n'],
+         'Tuổi trung bình': row['age']['mean'], 'Tuổi trung vị': row['age']['median'],
+         'BMI trung bình': row['bmi']['mean'], 'BMI trung vị': row['bmi']['median'],
+         'Số BMI quan sát': row['bmi']['n']}
+        for row in validation['exclusion']
+    ])
+    st.dataframe(excluded.round(2), hide_index=True, width='stretch')
+    st.caption('Loại dòng thiếu nhãn KOA khỏi huấn luyện và đánh giá. Giá trị đầu vào bị thiếu được xử lý trong pipeline. '
+               'Phân bố tuổi và BMI được đối chiếu trên giá trị quan sát. Cơ chế thiếu nhãn chưa xác định.')
+
+
 def render_evaluation(base, context, chart):
     st.markdown('## Hiệu năng mô hình')
     report = context['report']
@@ -154,9 +284,13 @@ def render_evaluation(base, context, chart):
         st.dataframe(pd.DataFrame([report.get('metrics', {})]).T, width='stretch')
         return
     diagnostics = read_diagnostics(base, context['summary'])
+    validation = diagnostics.get('extended_validation') if diagnostics else None
     st.caption(f"{report['train_rows']:,} hồ sơ train · {report['test_rows']:,} hồ sơ test · Ngưỡng báo cáo {report['decision_threshold']:g}.")
     st.caption(f'{KOA_OUTCOME}. {KOA_LABEL_LIMIT}')
-    results, curves, experiment = st.tabs(['So sánh trên test', 'ROC & Precision–Recall', 'Tối ưu trên train'])
+    results, curves, experiment, duplicates, additional = st.tabs([
+        'So sánh trên test', 'ROC & Precision–Recall', 'Tối ưu trên train', 'Ảnh hưởng của dòng trùng',
+        'Kiểm định bổ sung',
+    ])
     with results:
         matrices = {name: np.asarray(values['confusion_matrix']) for name, values in report['test'].items()}
         per_class = {name: class_scores(matrix) for name, matrix in matrices.items()}
@@ -164,6 +298,11 @@ def render_evaluation(base, context, chart):
         st.markdown('### Chỉ số trên tập kiểm thử')
         table = result_table(report, per_class)
         st.dataframe(table.round(4), hide_index=True, width='stretch')
+        if validation:
+            lr_auc = validation['paired_test_auc']['lr']
+            low, high = lr_auc['ci95']
+            st.caption(f"Logistic Regression trên {report['test_rows']} dòng test. ROC-AUC {lr_auc['value']:.4f}, "
+                       f"khoảng tin cậy 95% [{low:.4f}; {high:.4f}].")
         st.caption('Specificity là tỷ lệ dự đoán đúng trong lớp 0. Balanced Accuracy là trung bình recall của hai lớp.')
         if diagnostics:
             baseline = diagnostics['baseline']
@@ -183,7 +322,10 @@ def render_evaluation(base, context, chart):
         else:
             st.info('Bản mô hình này chưa có tệp dữ liệu để dựng đường cong.')
     with experiment:
+        if validation:
+            render_repeated_study(validation['cv'])
         if diagnostics:
+            st.markdown('### Kết quả 5 fold ban đầu')
             study = diagnostics['study']
             variants = pd.DataFrame([
                 {'Cấu hình': name, 'ROC-AUC trung bình': v['mean'], 'Độ lệch chuẩn': v['std'],
@@ -197,3 +339,14 @@ def render_evaluation(base, context, chart):
                                'matchthem_cv_toi_uu.csv', 'text/csv')
         else:
             st.info('Bản mô hình này chưa có kết quả thử cấu hình.')
+    with duplicates:
+        audit = diagnostics.get('duplicate_sensitivity') if diagnostics else None
+        if audit:
+            render_duplicate_sensitivity(audit)
+        else:
+            st.info('Bản mô hình này chưa có kết quả phân tích dòng trùng.')
+    with additional:
+        if validation:
+            render_validation(validation, chart)
+        else:
+            st.info('Bản mô hình này chưa có kết quả kiểm định bổ sung.')
