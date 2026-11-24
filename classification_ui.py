@@ -16,6 +16,8 @@ MEASURES = {
     'recall_class_1': 'Recall lớp 1', 'f1_class_1': 'F1 lớp 1',
     'roc_auc': 'ROC-AUC', 'average_precision': 'Average Precision',
 }
+CELL_LABELS = [['TN · Đúng lớp 0', 'FP · Báo nhầm lớp 1'],
+               ['FN · Bỏ sót lớp 1', 'TP · Đúng lớp 1']]
 
 
 def render_batch(context):
@@ -64,33 +66,62 @@ def read_diagnostics(base, summary):
     return None
 
 
-def result_table(report):
+def class_scores(matrix):
+    actual = matrix.sum(axis=1)
+    predicted = matrix.sum(axis=0)
+    correct = matrix.diagonal()
+    zero = np.zeros_like(actual, dtype=float)
+    precision = np.divide(correct, predicted, out=zero.copy(), where=predicted != 0)
+    recall = np.divide(correct, actual, out=zero.copy(), where=actual != 0)
+    f1 = np.divide(2 * correct, actual + predicted, out=zero.copy(), where=actual + predicted != 0)
+    return pd.DataFrame({
+        'Lớp': ['0 · at risk', '1 · diagnosed'], 'Số hồ sơ thực tế': actual,
+        'Precision': precision, 'Recall': recall, 'F1': f1,
+    })
+
+
+def result_table(report, per_class):
     return pd.DataFrame([
-        {'Mô hình': MODEL_NAMES[name], **{label: values['metrics'][key] for key, label in MEASURES.items()}}
+        {
+            'Mô hình': MODEL_NAMES[name],
+            **{label: values['metrics'][key] for key, label in MEASURES.items()},
+            'Specificity': per_class[name]['Recall'].iat[0],
+            'Balanced Accuracy': per_class[name]['Recall'].mean(),
+        }
         for name, values in report['test'].items()
     ])
 
 
-def render_confusion(report, chart):
-    options = {name: MODEL_NAMES[name] for name in report['test']}
-    name = st.selectbox('Mô hình xem chi tiết', list(options), format_func=options.get, key='evaluation_model')
-    normalized = st.toggle('Hiện tỷ lệ theo từng lớp thực tế', key='evaluation_normalized')
-    actual = np.array(report['test'][name]['confusion_matrix'])
-    tn, fp, fn, tp = actual.ravel()
-    denominator = actual.sum(axis=1, keepdims=True)
-    rates = np.divide(100 * actual, denominator, out=np.zeros_like(actual, dtype=float), where=denominator > 0)
-    fig = go.Figure(go.Heatmap(
-        z=rates if normalized else actual, x=['Dự đoán 0', 'Dự đoán 1'], y=['Thực tế 0', 'Thực tế 1'],
-        text=np.char.mod('%.1f%%', rates) if normalized else actual.astype(str), texttemplate='%{text}',
-        customdata=actual, colorscale='Blues', showscale=False, zmin=0,
-        zmax=100 if normalized else max(1, int(actual.max())),
-        hovertemplate='%{y}<br>%{x}<br>Số hồ sơ %{customdata}<extra></extra>',
-    ))
-    fig.update_yaxes(autorange='reversed')
-    chart(fig, 'evaluation_cm', 280)
-    left, right = st.columns(2)
-    left.metric('Nhãn 1 dự đoán đúng', f'{tp}/{tp + fn}')
-    right.metric('Nhãn 0 dự đoán thành 1', f'{fp}/{tn + fp}')
+def render_confusion(matrices, chart):
+    st.markdown('### Ma trận nhầm lẫn')
+    st.caption('Hàng là nhãn thực tế, cột là nhãn dự đoán. Hai ô trên đường chéo là các dự đoán đúng.')
+    normalized = st.toggle('Hiện tỷ lệ theo từng lớp thực tế', key='evaluation_normalized',
+                           help='Mỗi hàng tính theo tổng số hồ sơ của lớp thực tế tương ứng.')
+    limit = 100 if normalized else max(int(matrix.max()) for matrix in matrices.values()) or 1
+    for col, (name, matrix) in zip(st.columns(len(matrices)), matrices.items()):
+        tn, fp, fn, tp = matrix.ravel()
+        row_totals = matrix.sum(axis=1, keepdims=True)
+        rates = np.divide(100 * matrix, row_totals, out=np.zeros_like(matrix, dtype=float), where=row_totals != 0)
+        labels = np.char.mod('%.1f%%', rates) if normalized else matrix.astype(str)
+        with col:
+            st.markdown(f'#### {MODEL_NAMES[name]}')
+            fig = go.Figure(go.Heatmap(
+                z=rates if normalized else matrix,
+                x=['Dự đoán 0', 'Dự đoán 1'], y=['Thực tế 0', 'Thực tế 1'],
+                text=labels, texttemplate='%{customdata[0]}<br><b>%{text}</b>',
+                textfont={'size': 15, 'color': '#162f43'},
+                customdata=[[[label, int(count), float(rate)]
+                             for label, count, rate in zip(label_row, count_row, rate_row)]
+                            for label_row, count_row, rate_row in zip(CELL_LABELS, matrix, rates)],
+                colorscale=[[0, '#f0f6fc'], [1, '#8fbfe7']], showscale=False,
+                zmin=0, zmax=limit, xgap=4, ygap=4,
+                hovertemplate='%{y} → %{x}<br>%{customdata[0]}<br>%{customdata[1]} hồ sơ'
+                              ' (%{customdata[2]:.1f}% của hàng)<extra></extra>',
+            ))
+            fig.update_yaxes(autorange='reversed')
+            chart(fig, f'evaluation_cm_{name}', 270)
+            st.markdown(f'**Bỏ sót lớp 1:** {fn}/{fn + tp} hồ sơ  \n'
+                        f'**Báo nhầm lớp 1:** {fp}/{tn + fp} hồ sơ')
 
 
 def render_curves(diagnostics, report, chart):
@@ -126,12 +157,22 @@ def render_evaluation(base, context, chart):
     st.caption(f"{report['train_rows']:,} hồ sơ train · {report['test_rows']:,} hồ sơ test · Ngưỡng báo cáo {report['decision_threshold']:g}.")
     results, curves, experiment = st.tabs(['So sánh trên test', 'ROC & Precision–Recall', 'Tối ưu trên train'])
     with results:
-        table = result_table(report)
+        matrices = {name: np.asarray(values['confusion_matrix']) for name, values in report['test'].items()}
+        per_class = {name: class_scores(matrix) for name, matrix in matrices.items()}
+        render_confusion(matrices, chart)
+        st.markdown('### Chỉ số trên tập kiểm thử')
+        table = result_table(report, per_class)
         st.dataframe(table.round(4), hide_index=True, width='stretch')
+        st.caption('Specificity là tỷ lệ dự đoán đúng trong lớp 0. Balanced Accuracy là trung bình recall của hai lớp.')
         if diagnostics:
             baseline = diagnostics['baseline']
             st.caption(f"Mốc so sánh Accuracy: {baseline['accuracy']:.1%} khi luôn đoán lớp {baseline['class']}, lớp nhiều nhất trong train.")
-        render_confusion(report, chart)
+        with st.expander('Xem Precision, Recall và F1 theo từng lớp'):
+            by_class = pd.concat([scores.assign(**{'Mô hình': MODEL_NAMES[name]})
+                                  for name, scores in per_class.items()], ignore_index=True)
+            st.dataframe(by_class[['Mô hình', 'Lớp', 'Số hồ sơ thực tế', 'Precision', 'Recall', 'F1']].round(4),
+                         hide_index=True, width='stretch')
+            st.caption('Precision tính trên hồ sơ được dự đoán vào lớp. Recall tính trên hồ sơ thực sự thuộc lớp. F1 kết hợp hai chỉ số.')
         st.download_button('Tải bảng chỉ số CSV', table.to_csv(index=False, float_format='%.6f').encode('utf-8-sig'),
                            'matchthem_chi_so_test.csv', 'text/csv')
     with curves:
